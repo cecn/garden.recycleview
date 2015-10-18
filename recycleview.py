@@ -596,16 +596,17 @@ class LinearRecycleLayoutManager(RecycleLayoutManager):
         """
         recycleview = self.recycleview
         if self.orientation == "vertical":
-            k = ('height', 'scroll_y')
+            k = (1, 'scroll_y')
         else:
-            k = ('width', 'scroll_x')
+            k = (0, 'scroll_x')
 
         if not self.follow_tail or getattr(recycleview, k[1]) > 0.:
-            new_size = getattr(recycleview.container, k[0])
-            window = previous_viewport[2] - previous_viewport[1]
+            new_size = recycleview.container.size[k[0]]
+            window = previous_viewport[2][k[0]] - previous_viewport[1][k[0]]
             delta = new_size - previous_viewport[0]
-            scroll = (previous_viewport[0] - window + delta - previous_viewport[1])\
-                    / (new_size - window)
+            scroll = (previous_viewport[0] - window + delta - \
+                      previous_viewport[1][k[0]])\
+                     / (new_size - window)
             setattr(recycleview, k[1], min(1., max(0., scroll)))
 
     def compute_visible_views(self):
