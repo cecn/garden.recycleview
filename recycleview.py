@@ -600,13 +600,15 @@ class LinearRecycleLayoutManager(RecycleLayoutManager):
         else:
             k = (0, 'scroll_x')
 
-        if not self.follow_tail or getattr(recycleview, k[1]) > 0.:
+        if not self.follow_tail or previous_viewport[2][k[0]] > 0.:
             new_size = recycleview.container.size[k[0]]
             window = previous_viewport[1][k[0]] - previous_viewport[2][k[0]]
             delta = new_size - previous_viewport[0]
             scroll = (previous_viewport[2][k[0]] + delta) / \
                       (new_size - window)
             setattr(recycleview, k[1], min(1., max(0., scroll)))
+        elif self.follow_tail:
+            setattr(recycleview, k[1], 0.)
 
     def compute_visible_views(self):
         """(internal) Determine the views that need to be showed in the current
