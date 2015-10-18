@@ -450,6 +450,8 @@ class RecycleLayoutManager(EventDispatcher):
 
     default_size = NumericProperty("48dp")
     key_size = StringProperty()
+    append_keep_position = BooleanProperty(False)
+    follow_tail = BooleanProperty(False)
     recycleview = None
     container = None
 
@@ -517,6 +519,8 @@ class LinearRecycleLayoutManager(RecycleLayoutManager):
     computed_positions = []
 
     def compute_positions_and_sizes(self, append):
+        if append and self.append_keep_position:
+            orig_vp = self.get_viewport()
         recycleview = self.recycleview
         height = 0
         key_size = self.key_size
@@ -546,6 +550,8 @@ class LinearRecycleLayoutManager(RecycleLayoutManager):
             recycleview.container.size = self.computed_size, recycleview.height
         else:
             recycleview.container.size = recycleview.width, self.computed_size
+        if append and self.append_keep_position:
+            self.keep_relative_position(orig_vp)
 
     def _compute_positions(self, sizes, pos=0):
         for size in sizes:
@@ -565,26 +571,52 @@ class LinearRecycleLayoutManager(RecycleLayoutManager):
             recycleview.do_scroll_x = False
             recycleview.do_scroll_y = True
 
+    def get_viewport(self):
+        """(internal) retrieves the orientation dependent sizes and bounds
+        """
+        recycleview = self.recycleview
+        container = recycleview.container
+        if self.orientation == "vertical":
+            size = container.height
+            scroll_y = min(1, max(recycleview.scroll_y, 0))
+            px_end = 0, max(0, (size - recycleview.height) * scroll_y)
+            px_start = 0, px_end[1] + min(recycleview.height, size)
+            viewport = 0, px_end[1], container.width, px_start[1]
+        else:
+            size = container.width
+            scroll_x = min(1, max(recycleview.scroll_x, 0))
+            px_start = max(0, (size - recycleview.width) * scroll_x), 0
+            px_end = px_start[0] + min(recycleview.width, size), 0
+            viewport = px_end[0], 0, px_start[0], container.height
+        return size, px_start, px_end, viewport
+
+    def keep_relative_position(self, previous_viewport):
+        """(internal) changes the scroll position so that the viewport is
+        over the exact same location as it was before the viewport was changed.
+        """
+        recycleview = self.recycleview
+        if self.orientation == "vertical":
+            k = ('height', 'scroll_y')
+        else:
+            k = ('width', 'scroll_x')
+
+        if not self.follow_tail or getattr(recycleview, k[1]) > 0.:
+            new_size = getattr(recycleview.container, k[0])
+            window = previous_viewport[2] - previous_viewport[1]
+            delta = new_size - previous_viewport[0]
+            scroll = (previous_viewport[0] - window + delta - previous_viewport[1])\
+                    / (new_size - window)
+            setattr(recycleview, k[1], min(1., max(0., scroll)))
+
     def compute_visible_views(self):
         """(internal) Determine the views that need to be showed in the current
         scrollview. All the hidden views will be flagged as dirty, and might
         be resued for others views.
         """
-        # determine the view to create for the scrollview y / height
         recycleview = self.recycleview
         container = recycleview.container
-        if self.orientation == "vertical":
-            h = container.height
-            scroll_y = min(1, max(recycleview.scroll_y, 0))
-            px_end = 0, max(0, (h - recycleview.height) * scroll_y)
-            px_start = 0, px_end[1] + min(recycleview.height, h)
-            viewport = 0, px_end[1], container.width, px_start[1]
-        else:
-            w = container.width
-            scroll_x = min(1, max(recycleview.scroll_x, 0))
-            px_start = max(0, (w - recycleview.width) * scroll_x), 0
-            px_end = px_start[0] + min(recycleview.width, w), 0
-            viewport = px_end[0], 0, px_start[0], container.height
+
+        size, px_start, px_end, viewport = self.get_viewport()
 
         # now calculate the view indices we must show
         at_idx = self.get_view_index_at
@@ -875,6 +907,10 @@ class RecycleView(ScrollView):
             funbind('default_size', self._dispatch_prop_on_source,
                     'default_size')
             funbind('key_size', self._dispatch_prop_on_source, 'key_size')
+            funbind('append_keep_position', self._dispatch_prop_on_source,
+                    'append_keep_position')
+            funbind('follow_tail', self._dispatch_prop_on_source,
+                    'follow_tail')
 
         if value is None:
             self._layout_manager = lm = LinearRecycleLayoutManager()
@@ -889,6 +925,10 @@ class RecycleView(ScrollView):
         fbind = lm.fbind if _kivy_1_9_1 else lm.fast_bind
         fbind('default_size', self._dispatch_prop_on_source, 'default_size')
         fbind('key_size', self._dispatch_prop_on_source, 'key_size')
+        fbind('append_keep_position', self._dispatch_prop_on_source,
+              'append_keep_position')
+        fbind('follow_tail', self._dispatch_prop_on_source,
+              'follow_tail')
         if self.adapter is not None:
             self.ask_refresh_from_data()
         return True
@@ -963,4 +1003,23 @@ class RecycleView(ScrollView):
     key_size = AliasProperty(_get_key_size, _set_key_size,
                              bind=["layout_manager"])
     """Set the key to look for the size on the current `layout_manager`
+    """
+
+    def _get_append_keep_position(self):
+        return self.layout_manager.append_keep_position
+    def _set_append_keep_position(self, value):
+        self.layout_manager.append_keep_position = value
+    append_keep_position = AliasProperty(_get_append_keep_position,
+                                         _set_append_keep_position,
+                                         bind=["layout_manager"])
+    """Set the append keep pos flag on the current `layout_manager`
+    """
+
+    def _get_follow_tail(self):
+        return self.layout_manager.follow_tail
+    def _set_follow_tail(self, value):
+        self.layout_manager.follow_tail = value
+    follow_tail = AliasProperty(_get_follow_tail, _set_follow_tail,
+                                bind=["layout_manager"])
+    """Set the follow tail flag on the current `layout_manager`
     """
